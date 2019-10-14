@@ -2,6 +2,7 @@ package gomamiso
 
 import (
 	"bufio"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+
+	_ "github.com/lib/pq"
 )
 
 const (
@@ -27,10 +30,16 @@ type Engine struct {
 	Device       string
 	snapshot_len int32
 	promiscuous  bool
-	err          error
 	timeout      time.Duration
 	handle       *pcap.Handle
 	action       []*Action
+	db           *sql.DB
+}
+
+type HOST struct {
+	IP   string
+	MAC  string
+	TIME string
 }
 
 func DefaultAction() []*Action {
@@ -48,7 +57,7 @@ func Default() *Engine {
 	engine := &Engine{
 		Device:       "",
 		snapshot_len: 1024,
-		promiscuous:  false,
+		promiscuous:  true,
 		timeout:      30 * time.Second,
 		action:       DefaultAction(),
 	}
@@ -65,31 +74,66 @@ func (engine *Engine) SetHook(point int, fn func()) {
 	engine.action[point].hooked = true
 }
 
-func (engine *Engine) Run() {
+func (engine *Engine) ShowDB() {
+	rows, err := engine.db.Query("SELECT * from network_host")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	var hs []HOST
+	for rows.Next() {
+		var h HOST
+		rows.Scan(&h.IP, &h.MAC, &h.TIME)
+		hs = append(hs, h)
+	}
+
+	for _, e := range hs {
+		fmt.Printf("%+v\n", e)
+	}
+}
+func (engine *Engine) Init() {
+	var err error
+	engine.db, err = sql.Open("postgres", "host=127.0.0.1 port=5432 dbname=exampledb sslmode=disable")
+	if err != nil {
+		log.Fatal(err)
+		engine.db.Close()
+	}
+
 	//Open device
 	if engine.Device == "" {
 		log.Println("Please Set Device in below")
 		FindDevice()
-		return
+		os.Exit(1)
 	}
 
-	engine.handle, engine.err = pcap.OpenLive(engine.Device, engine.snapshot_len, engine.promiscuous, engine.timeout)
-	if engine.err != nil {
-		log.Fatal(engine.err)
+	engine.handle, err = pcap.OpenLive(engine.Device, engine.snapshot_len, engine.promiscuous, engine.timeout)
+	if err != nil {
+		log.Fatal(err)
 	}
-	pakcetSource := gopacket.NewPacketSource(engine.handle, engine.handle.LinkType())
-	packets := pakcetSource.Packets()
-	defer close(packets)
+}
 
-	if engine.action[INIT].hooked {
-		engine.action[INIT].exec()
+func (engine *Engine) Deinit() {
+	engine.db.Close()
+}
+
+func (engine *Engine) Run() {
+	engine.Init()
+	if false {
+		pakcetSource := gopacket.NewPacketSource(engine.handle, engine.handle.LinkType())
+		packets := pakcetSource.Packets()
+		defer close(packets)
+
+		if engine.action[INIT].hooked {
+			engine.action[INIT].exec()
+		}
+
+		go engine.PacketCapture(engine.handle, packets)
+
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
 	}
-
-	go engine.PacketCapture(engine.handle, packets)
-
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
-
+	engine.ShowDB()
+	engine.Deinit()
 }
 
 func (engine *Engine) PacketCapture(handle *pcap.Handle, packets chan gopacket.Packet) {
