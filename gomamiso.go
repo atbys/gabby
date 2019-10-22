@@ -3,6 +3,7 @@ package gomamiso
 import (
 	"bufio"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -19,6 +20,7 @@ const (
 	REQUEST = iota
 	REPLY
 	INIT
+	HOOK_POINT_NUM
 )
 
 type Action struct {
@@ -42,9 +44,13 @@ type HOST struct {
 	TIME string
 }
 
-func DefaultAction() []*Action {
+func New() *Engine {
+	return &Engine{}
+}
+
+func ClearAction() []*Action {
 	var action []*Action
-	for i := 0; i < 3; i++ {
+	for i := 0; i < HOOK_POINT_NUM; i++ {
 		action = append(action, &Action{
 			hooked: false,
 			exec:   nil,
@@ -55,11 +61,11 @@ func DefaultAction() []*Action {
 
 func Default() *Engine {
 	engine := &Engine{
-		Device:       "",
+		Device:       "enp0",
 		snapshot_len: 1024,
 		promiscuous:  true,
 		timeout:      30 * time.Second,
-		action:       DefaultAction(),
+		action:       ClearAction(),
 	}
 
 	return engine
@@ -74,50 +80,41 @@ func (engine *Engine) SetHook(point int, fn func()) {
 	engine.action[point].hooked = true
 }
 
-func (engine *Engine) ShowDB() {
-	rows, err := engine.db.Query("SELECT * from network_host")
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	var hs []HOST
-	for rows.Next() {
-		var h HOST
-		rows.Scan(&h.IP, &h.MAC, &h.TIME)
-		hs = append(hs, h)
-	}
-
-	for _, e := range hs {
-		fmt.Printf("%+v\n", e)
-	}
-}
-func (engine *Engine) Init() {
+func (engine *Engine) Init() error {
 	var err error
-	engine.db, err = sql.Open("postgres", "host=127.0.0.1 port=5432 dbname=exampledb sslmode=disable")
+	engine.db, err = sql.Open("postgres", "host=127.0.0.1 port=5432 dbname=hellosql sslmode=disable")
 	if err != nil {
-		log.Fatal(err)
-		engine.db.Close()
+		return err
 	}
 
 	//Open device
 	if engine.Device == "" {
 		log.Println("Please Set Device in below")
 		FindDevice()
-		os.Exit(1)
+		engine.db.Close()
+		return errors.New("cannot open device")
 	}
 
 	engine.handle, err = pcap.OpenLive(engine.Device, engine.snapshot_len, engine.promiscuous, engine.timeout)
 	if err != nil {
-		log.Fatal(err)
+		engine.db.Close()
+		return err
 	}
+
+	return nil
 }
 
 func (engine *Engine) Deinit() {
 	engine.db.Close()
 }
 
-func (engine *Engine) Run() {
-	engine.Init()
+func (engine *Engine) Run() error {
+	err := engine.Init()
+	if err != nil {
+		return err
+	}
+	defer engine.Deinit()
+
 	if false {
 		pakcetSource := gopacket.NewPacketSource(engine.handle, engine.handle.LinkType())
 		packets := pakcetSource.Packets()
@@ -132,8 +129,8 @@ func (engine *Engine) Run() {
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
 	}
-	engine.ShowDB()
-	engine.Deinit()
+	
+	return nil
 }
 
 func (engine *Engine) PacketCapture(handle *pcap.Handle, packets chan gopacket.Packet) {

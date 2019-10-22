@@ -1,2 +1,2 @@
 # GOMAMISO
-ARP monitoring platform
+GO ARP monitoring platform
