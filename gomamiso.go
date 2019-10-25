@@ -2,7 +2,6 @@ package gomamiso
 
 import (
 	"bufio"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -25,7 +24,7 @@ const (
 
 type Action struct {
 	hooked bool
-	exec   func()
+	exec   func(arg ...interface{})
 }
 
 type Engine struct {
@@ -35,13 +34,7 @@ type Engine struct {
 	timeout      time.Duration
 	handle       *pcap.Handle
 	action       []*Action
-	db           *sql.DB
-}
-
-type HOST struct {
-	IP   string
-	MAC  string
-	TIME string
+	dbinfo       DatabaseInfo
 }
 
 func New() *Engine {
@@ -60,13 +53,12 @@ func ClearAction() []*Action {
 }
 
 func Default() *Engine {
-	engine := &Engine{
-		Device:       "enp0",
-		snapshot_len: 1024,
-		promiscuous:  true,
-		timeout:      30 * time.Second,
-		action:       ClearAction(),
-	}
+	engine := New()
+	//engine.Device = ""
+	engine.snapshot_len = 1024
+	engine.promiscuous = true
+	engine.timeout = 30 * time.Second
+	engine.action = ClearAction()
 
 	return engine
 }
@@ -75,29 +67,36 @@ func (engine *Engine) SetDevice(name string) {
 	engine.Device = name
 }
 
-func (engine *Engine) SetHook(point int, fn func()) {
-	engine.action[point].exec = fn
+func (engine *Engine) SetHook(point int, action func(arg ...interface{})) {
+	engine.action[point].exec = action
 	engine.action[point].hooked = true
 }
 
 func (engine *Engine) Init() error {
-	var err error
-	engine.db, err = sql.Open("postgres", "host=127.0.0.1 port=5432 dbname=hellosql sslmode=disable")
+	info, err := ReadAndSetInfo()
 	if err != nil {
 		return err
 	}
 
+	engine.dbinfo.OpenParameter = fmt.Sprintf(
+		"host=127.0.0.1 port=5432 user=%s password=%s dbname=%s sslmode=disable",
+		info.Database.User,
+		info.Database.Password,
+		"exampledb",
+	)
+
+	engine.dbinfo.ColumnName = append(engine.dbinfo.ColumnName, "ipaddr", "macaddr", "timestamp")
 	//Open device
-	if engine.Device == "" {
+	if info.Device.Name == "" {
 		log.Println("Please Set Device in below")
 		FindDevice()
-		engine.db.Close()
 		return errors.New("cannot open device")
 	}
 
+	engine.Device = info.Device.Name
+
 	engine.handle, err = pcap.OpenLive(engine.Device, engine.snapshot_len, engine.promiscuous, engine.timeout)
 	if err != nil {
-		engine.db.Close()
 		return err
 	}
 
@@ -105,7 +104,7 @@ func (engine *Engine) Init() error {
 }
 
 func (engine *Engine) Deinit() {
-	engine.db.Close()
+
 }
 
 func (engine *Engine) Run() error {
@@ -115,21 +114,19 @@ func (engine *Engine) Run() error {
 	}
 	defer engine.Deinit()
 
-	if false {
-		pakcetSource := gopacket.NewPacketSource(engine.handle, engine.handle.LinkType())
-		packets := pakcetSource.Packets()
-		defer close(packets)
+	pakcetSource := gopacket.NewPacketSource(engine.handle, engine.handle.LinkType())
+	packets := pakcetSource.Packets()
+	defer close(packets)
 
-		if engine.action[INIT].hooked {
-			engine.action[INIT].exec()
-		}
-
-		go engine.PacketCapture(engine.handle, packets)
-
-		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
+	if engine.action[INIT].hooked {
+		engine.action[INIT].exec()
 	}
-	
+
+	go engine.PacketCapture(engine.handle, packets)
+
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+
 	return nil
 }
 
