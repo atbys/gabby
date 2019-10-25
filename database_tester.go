@@ -3,13 +3,32 @@
 package main
 
 import (
+	"log"
+
 	"github.com/atbys/gomamiso"
 )
 
-func main(){
+func main() {
 	engine := gomamiso.Default()
-	engine.Init()
-	defer engine.Deinit()
+	err := engine.Init()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	engine.Insert()
+	column := gomamiso.Column{
+		"ipaddr":    "'192.168.3.1'",
+		"macaddr":   "'11-11-11-11-11-11'",
+		"timestamp": "current_timestamp",
+	}
+	engine.Insert(column)
+
+	err = engine.ShowDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = engine.AddColumn("status")
+	if err != nil {
+		log.Fatal(err)
+	}
 }

@@ -5,28 +5,28 @@ import (
 	"io/ioutil"
 )
 
-type Setting struct {
-	Database Database `json:"database"`
-	Device   Device   `json:"device`
+type SettingInfo struct {
+	Database DatabaseInfo `json:"database"`
+	Device   DeviceInfo   `json:"device`
 }
 
-type Database struct {
+type DatabaseInfo struct {
 	User     string `json:"user"`
 	Password string `json:"password"`
 }
 
-type Device struct {
+type DeviceInfo struct {
 	Name    string `json:"name"`
 	Macaddr string `json:"macaddr"`
 }
 
-func ReadAndSetInfo() (*Setting, error) {
+func ReadAndSetInfo() (*SettingInfo, error) {
 	bytes, err := ioutil.ReadFile("setting.json")
 	if err != nil {
 		return nil, err
 	}
 
-	var setting Setting
+	var setting SettingInfo
 	if err = json.Unmarshal(bytes, &setting); err != nil {
 		return nil, err
 	}

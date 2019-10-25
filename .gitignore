@@ -1,2 +1,4 @@
 # setting file
 *.json
+
+./playground.go

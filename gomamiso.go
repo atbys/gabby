@@ -34,7 +34,7 @@ type Engine struct {
 	timeout      time.Duration
 	handle       *pcap.Handle
 	action       []*Action
-	dbinfo       DatabaseInfo
+	dbinfo       Database
 }
 
 func New() *Engine {

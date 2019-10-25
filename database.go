@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 
 	_ "github.com/lib/pq"
 )
@@ -14,7 +15,7 @@ type HOST struct {
 	timestamp string
 }
 
-type DatabaseInfo struct {
+type Database struct {
 	db              *sql.DB
 	OpenParameter   string
 	ColumnName      []string
@@ -28,14 +29,14 @@ func (engine *Engine) AddColumn(columnName string) error {
 	db := engine.dbinfo.db
 	db, err = sql.Open("postgres", engine.dbinfo.OpenParameter)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer db.Close()
 
-	statement := fmt.Sprintf("ALTER TABLE network_host ADD COLUMN %s;", columnName)
+	statement := fmt.Sprintf("ALTER TABLE network_host ADD %s varchar(20);", columnName)
 	_, err = db.Query(statement)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	engine.dbinfo.ColumnName = append(engine.dbinfo.ColumnName, columnName)
@@ -70,21 +71,22 @@ func (engine *Engine) ShowDB() error {
 	return nil
 }
 
-func (engine *Engine) CreateInsertStatement() {
-	defautStatement := "INSERT INTO network_host TABLE (%s) VALUES (%s);"
-	columnNames := ""
-	columnValues := ""
-	for i, name := range engine.dbinfo.ColumnName {
-		columnNames += name + ", "
-		columnValues += "$" + string(i+1) + ", "
-	}
+func (engine *Engine) CreateInsertStatement(column Column) {
+	var columnNames, columnValues []string
 
-	engine.dbinfo.InsertStatement = fmt.Sprintf(defautStatement, columnNames, columnValues)
+	defautStatement := "INSERT INTO network_host (%s) VALUES (%s);"
+	for k, v := range column {
+		columnNames = append(columnNames, k)
+		columnValues = append(columnValues, v)
+	}
+	columnNamesStr := strings.Join(columnNames, ", ")
+	columnValuesStr := strings.Join(columnValues, ", ")
+
+	engine.dbinfo.InsertStatement = fmt.Sprintf(defautStatement, columnNamesStr, columnValuesStr)
 
 }
 
-//TODO
-func (engine *Engine) Insert() {
+func (engine *Engine) Insert(column Column) {
 	var err error
 	db := engine.dbinfo.db
 
@@ -94,20 +96,10 @@ func (engine *Engine) Insert() {
 	}
 	defer db.Close()
 
-	ipaddr := "192.168.2.1"
-	macaddr := "ff-ff-ff-ff-ff-ff"
-
-	statement := "INSERT INTO network_host VALUES ($1, $2, current_timestamp);"
-	stmt, err := db.Prepare(statement)
+	engine.CreateInsertStatement(column)
+	_, err = db.Query(engine.dbinfo.InsertStatement)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer stmt.Close()
-
-	rows, err := stmt.Query(ipaddr, macaddr)
-	for rows.Next() {
-		h := HOST{}
-		rows.Scan(&h.ipaddr, &h.macaddr, &h.timestamp)
-		fmt.Println(h)
-	}
+	fmt.Println("SQL is executed.")
 }
