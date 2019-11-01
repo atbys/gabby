@@ -37,8 +37,20 @@ type Engine struct {
 	dbinfo       Database
 }
 
-func New() *Engine {
-	return &Engine{}
+func New() (*Engine, error) {
+	engine := &Engine{
+		snapshot_len: 1024,
+		promiscuous:  true,
+		timeout:      30 * time.Second,
+		action:       ClearAction(),
+	}
+
+	err := engine.Init()
+	if err != nil {
+		return nil, err
+	}
+
+	return engine, nil
 }
 
 func ClearAction() []*Action {
@@ -50,17 +62,6 @@ func ClearAction() []*Action {
 		})
 	}
 	return action
-}
-
-func Default() *Engine {
-	engine := New()
-	//engine.Device = ""
-	engine.snapshot_len = 1024
-	engine.promiscuous = true
-	engine.timeout = 30 * time.Second
-	engine.action = ClearAction()
-
-	return engine
 }
 
 func (engine *Engine) SetDevice(name string) {
@@ -108,11 +109,6 @@ func (engine *Engine) Deinit() {
 }
 
 func (engine *Engine) Run() error {
-	err := engine.Init()
-	if err != nil {
-		return err
-	}
-	defer engine.Deinit()
 
 	pakcetSource := gopacket.NewPacketSource(engine.handle, engine.handle.LinkType())
 	packets := pakcetSource.Packets()
@@ -146,7 +142,7 @@ func (engine *Engine) PacketCapture(handle *pcap.Handle, packets chan gopacket.P
 		} else if isReply && engine.action[REPLY].hooked {
 			engine.action[REPLY].exec()
 		} else {
-			fmt.Println("unknown type")
+			fmt.Println("unknown type or no hook")
 		}
 	}
 }
