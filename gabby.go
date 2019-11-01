@@ -1,4 +1,4 @@
-package gomamiso
+package gabby
 
 import (
 	"bufio"
@@ -104,11 +104,7 @@ func (engine *Engine) Init() error {
 	return nil
 }
 
-func (engine *Engine) Deinit() {
-
-}
-
-func (engine *Engine) Run() error {
+func (engine *Engine) Run() {
 
 	pakcetSource := gopacket.NewPacketSource(engine.handle, engine.handle.LinkType())
 	packets := pakcetSource.Packets()
@@ -122,8 +118,6 @@ func (engine *Engine) Run() error {
 
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Scan()
-
-	return nil
 }
 
 func (engine *Engine) PacketCapture(handle *pcap.Handle, packets chan gopacket.Packet) {

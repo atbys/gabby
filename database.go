@@ -1,4 +1,4 @@
-package gomamiso
+package gabby
 
 import (
 	"database/sql"

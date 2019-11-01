@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/atbys/gomamiso"
+	"github.com/atbys/gabby"
 )
 
 func startFunc(name string) {
@@ -22,16 +22,13 @@ func getReplyPacket(...interface{}) {
 }
 
 func main() {
-	e, err := gomamiso.New()
+	e, err := gabby.New()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	e.SetHook(gomamiso.INIT, startFunc)
-	e.SetHook(gomamiso.REQUEST, getRequestPacket)
-	e.SetHook(gomamiso.REPLY, getReplyPacket)
-	err = e.Run()
-	if err != nil {
-		log.Fatal(err)
-	}
+	e.SetHook(gabby.INIT, startFunc)
+	e.SetHook(gabby.REQUEST, getRequestPacket)
+	e.SetHook(gabby.REPLY, getReplyPacket)
+	e.Run()
 }
