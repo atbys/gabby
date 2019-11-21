@@ -1,6 +1,5 @@
 package gabby
 
-//goland
 import (
 	"errors"
 	"fmt"
@@ -27,7 +26,7 @@ type Engine struct {
 	phandle         *pcap.Handle
 	RequestHandlers map[string]Handlers
 	ReplyHandlers   map[string]Handlers
-	dbinfo          Database
+	DB          Database
 }
 
 func New() (*Engine, error) {
@@ -52,14 +51,13 @@ func (self *Engine) Init() error {
 	if err != nil {
 		return err
 	}
-	self.dbinfo.OpenParameter = fmt.Sprintf(
-		"host=127.0.0.1 port=5432 user=%s password=%s dbname=%s sslmode=disable",
+	self.DB.OpenParameter = fmt.Sprintf(
+		"host=127.0.0.1 port=5432 user=%s dbname=%s sslmode=disable",
 		info.Database.User,
-		info.Database.Password,
-		"exampledb",
+		"network_test",
 	)
 
-	self.dbinfo.ColumnName = append(self.dbinfo.ColumnName, "ipaddr", "macaddr", "timestamp")
+	self.DB.ColumnName = append(self.DB.ColumnName, "ipaddr", "macaddr", "timestamp")
 	//Open device
 	if info.Device.Name == "" {
 		log.Println("Please Set Device in below")
@@ -137,11 +135,15 @@ func (self *Engine) PacketAnalyze(packets chan gopacket.Packet) {
 
 func (self *Engine) Request(addr string, handle Handle) {
 	self.RequestHandlers[addr] = append(self.RequestHandlers[addr], handle)
-	fmt.Println("Request handlers num =", len(self.RequestHandlers[addr]))
 }
 
 func (self *Engine) Reply(addr string, handle Handle) {
 	self.ReplyHandlers[addr] = append(self.ReplyHandlers[addr], handle)
+}
+
+func (self *Engine) Use(middleware Handle) {
+	self.RequestHandlers["ANY"] = append(self.RequestHandlers["ANY"], middleware)
+	self.ReplyHandlers["ANY"] = append(self.ReplyHandlers["ANY"], middleware)
 }
 
 func FindDevice() {

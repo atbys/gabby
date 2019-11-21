@@ -24,35 +24,35 @@ type Database struct {
 
 type Column map[string]string
 
-func (engine *Engine) AddColumn(columnName string) error {
+func (self *Database) AddColumn(columnName string) error {
 	var err error
-	db := engine.dbinfo.db
-	db, err = sql.Open("postgres", engine.dbinfo.OpenParameter)
+	db := self.db
+	db, err = sql.Open("postgres", self.OpenParameter)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	statement := fmt.Sprintf("ALTER TABLE network_host ADD %s varchar(20);", columnName)
+	statement := fmt.Sprintf("ALTER TABLE hosts ADD %s varchar(20);", columnName)
 	_, err = db.Query(statement)
 	if err != nil {
 		return err
 	}
 
-	engine.dbinfo.ColumnName = append(engine.dbinfo.ColumnName, columnName)
+	self.ColumnName = append(self.ColumnName, columnName)
 	return nil
 }
 
-func (engine *Engine) ShowDB() error {
+func (self *Database) ShowDB() error {
 	var err error
-	db := engine.dbinfo.db
-	db, err = sql.Open("postgres", engine.dbinfo.OpenParameter)
+	db := self.db
+	db, err = sql.Open("postgres", self.OpenParameter)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SELECT * from network_host;")
+	rows, err := db.Query("SELECT * from hosts;")
 	if err != nil {
 		return err
 	}
@@ -71,10 +71,10 @@ func (engine *Engine) ShowDB() error {
 	return nil
 }
 
-func (engine *Engine) CreateInsertStatement(column Column) {
+func (self *Database) createInsertStatement(column Column) {
 	var columnNames, columnValues []string
 
-	defautStatement := "INSERT INTO network_host (%s) VALUES (%s);"
+	defautStatement := "INSERT INTO hosts (%s) VALUES (%s);"
 	for k, v := range column {
 		columnNames = append(columnNames, k)
 		columnValues = append(columnValues, v)
@@ -82,22 +82,22 @@ func (engine *Engine) CreateInsertStatement(column Column) {
 	columnNamesStr := strings.Join(columnNames, ", ")
 	columnValuesStr := strings.Join(columnValues, ", ")
 
-	engine.dbinfo.InsertStatement = fmt.Sprintf(defautStatement, columnNamesStr, columnValuesStr)
+	self.InsertStatement = fmt.Sprintf(defautStatement, columnNamesStr, columnValuesStr)
 
 }
 
-func (engine *Engine) Insert(column Column) {
+func (self *Database) Insert(column Column) {
 	var err error
-	db := engine.dbinfo.db
+	db := self.db
 
-	db, err = sql.Open("postgres", engine.dbinfo.OpenParameter)
+	db, err = sql.Open("postgres", self.OpenParameter)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	engine.CreateInsertStatement(column)
-	_, err = db.Query(engine.dbinfo.InsertStatement)
+	self.createInsertStatement(column)
+	_, err = db.Query(self.InsertStatement)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	device       string = "enp0s31f6"
-	snapshot_len int32  = 60
+	device       string = "en0"
+	snapshot_len int32  = 1024
 	promiscuous  bool   = false
 	err          error
 	timeout      time.Duration = 30 * time.Second
