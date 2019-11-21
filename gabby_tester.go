@@ -5,20 +5,22 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 
 	"github.com/atbys/gabby"
 )
 
-func startFunc(name string) {
-	fmt.Println("Start system")
+func SampleRequestHandle(c *gabby.Context) {
+	fmt.Print("REQ")
+	fmt.Println(net.IP(c.Arp.SourceProtAddress).String())
 }
 
-func getRequestPacket(...interface{}) {
-	fmt.Println("Get request packet")
+func SampleRequestHandle2(c *gabby.Context) {
+	fmt.Println("Sampleeeeeeeeeeeeeeeeeee")
 }
-
-func getReplyPacket(...interface{}) {
-	fmt.Println("Get reply packet")
+func SampleReplyHandle(c *gabby.Context) {
+	fmt.Print("REP")
+	fmt.Println(net.IP(c.Arp.SourceProtAddress).String())
 }
 
 func main() {
@@ -27,8 +29,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	e.SetHook(gabby.INIT, startFunc)
-	e.SetHook(gabby.REQUEST, getRequestPacket)
-	e.SetHook(gabby.REPLY, getReplyPacket)
+	e.Request("ANY", SampleRequestHandle)
+	e.Request("ANY", SampleRequestHandle2)
+	e.Reply("ANY", SampleReplyHandle)
 	e.Run()
 }

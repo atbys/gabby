@@ -1,92 +1,64 @@
 package gabby
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
-
-	_ "github.com/lib/pq"
 )
 
-const (
-	REQUEST = iota
-	REPLY
-	INIT
-	HOOK_POINT_NUM
-)
+type Handle func(*Context)
 
-type Action struct {
-	hooked bool
-	exec   func(arg ...interface{})
-}
+type Handlers []Handle
 
 type Engine struct {
-	Device       string
-	snapshot_len int32
-	promiscuous  bool
-	timeout      time.Duration
-	handle       *pcap.Handle
-	action       []*Action
-	dbinfo       Database
+	DeviceName      string
+	snapshotLen     int32
+	promiscuous     bool
+	timeout         time.Duration
+	phandle         *pcap.Handle
+	RequestHandlers map[string]Handlers
+	ReplyHandlers   map[string]Handlers
+	dbinfo          Database
 }
 
 func New() (*Engine, error) {
-	engine := &Engine{
-		snapshot_len: 1024,
-		promiscuous:  true,
-		timeout:      30 * time.Second,
-		action:       ClearAction(),
+	e := &Engine{
+		snapshotLen:     1024,
+		promiscuous:     true,
+		timeout:         30 * time.Second,
+		RequestHandlers: make(map[string]Handlers),
+		ReplyHandlers:   make(map[string]Handlers),
 	}
 
-	err := engine.Init()
+	err := e.Init()
 	if err != nil {
 		return nil, err
 	}
 
-	return engine, nil
+	return e, nil
 }
 
-func ClearAction() []*Action {
-	var action []*Action
-	for i := 0; i < HOOK_POINT_NUM; i++ {
-		action = append(action, &Action{
-			hooked: false,
-			exec:   nil,
-		})
-	}
-	return action
-}
-
-func (engine *Engine) SetDevice(name string) {
-	engine.Device = name
-}
-
-func (engine *Engine) SetHook(point int, action func(arg ...interface{})) {
-	engine.action[point].exec = action
-	engine.action[point].hooked = true
-}
-
-func (engine *Engine) Init() error {
+func (self *Engine) Init() error {
 	info, err := ReadAndSetInfo()
 	if err != nil {
 		return err
 	}
-
-	engine.dbinfo.OpenParameter = fmt.Sprintf(
+	self.dbinfo.OpenParameter = fmt.Sprintf(
 		"host=127.0.0.1 port=5432 user=%s password=%s dbname=%s sslmode=disable",
 		info.Database.User,
 		info.Database.Password,
 		"exampledb",
 	)
 
-	engine.dbinfo.ColumnName = append(engine.dbinfo.ColumnName, "ipaddr", "macaddr", "timestamp")
+	self.dbinfo.ColumnName = append(self.dbinfo.ColumnName, "ipaddr", "macaddr", "timestamp")
 	//Open device
 	if info.Device.Name == "" {
 		log.Println("Please Set Device in below")
@@ -94,9 +66,9 @@ func (engine *Engine) Init() error {
 		return errors.New("cannot open device")
 	}
 
-	engine.Device = info.Device.Name
+	self.DeviceName = info.Device.Name
 
-	engine.handle, err = pcap.OpenLive(engine.Device, engine.snapshot_len, engine.promiscuous, engine.timeout)
+	self.phandle, err = pcap.OpenLive(self.DeviceName, self.snapshotLen, self.promiscuous, self.timeout)
 	if err != nil {
 		return err
 	}
@@ -104,23 +76,23 @@ func (engine *Engine) Init() error {
 	return nil
 }
 
-func (engine *Engine) Run() {
-
-	pakcetSource := gopacket.NewPacketSource(engine.handle, engine.handle.LinkType())
+func (self *Engine) Run() {
+	pakcetSource := gopacket.NewPacketSource(self.phandle, self.phandle.LinkType())
 	packets := pakcetSource.Packets()
 	defer close(packets)
 
-	if engine.action[INIT].hooked {
-		engine.action[INIT].exec()
-	}
+	quit := make(chan os.Signal)
+	signal.Notify(quit, os.Interrupt)
 
-	go engine.PacketCapture(engine.handle, packets)
+	fmt.Println("START")
+	go self.PacketAnalyze(packets)
 
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
+	<-quit
+
+	fmt.Println("[Interrupt] Exit")
 }
 
-func (engine *Engine) PacketCapture(handle *pcap.Handle, packets chan gopacket.Packet) {
+func (self *Engine) PacketAnalyze(packets chan gopacket.Packet) {
 	for packet := range packets {
 		arpLayer := packet.Layer(layers.LayerTypeARP)
 		if arpLayer == nil {
@@ -131,14 +103,44 @@ func (engine *Engine) PacketCapture(handle *pcap.Handle, packets chan gopacket.P
 		var isRequest = arp.Operation == layers.ARPRequest
 		var isReply = arp.Operation == layers.ARPReply
 
-		if isRequest && engine.action[REQUEST].hooked {
-			engine.action[REQUEST].exec()
-		} else if isReply && engine.action[REPLY].hooked {
-			engine.action[REPLY].exec()
-		} else {
-			fmt.Println("unknown type or no hook")
+		srcIP := net.IP(arp.SourceProtAddress).String()
+
+		c := &Context{
+			Arp:    arp,
+			index:  0,
+			engine: self,
 		}
+
+		if isRequest {
+			handlers, ok := self.RequestHandlers[srcIP]
+
+			if ok {
+				c.handlers = handlers
+			} else {
+				c.handlers, ok = self.RequestHandlers["ANY"]
+			}
+		} else if isReply {
+			handlers, ok := self.ReplyHandlers[srcIP]
+			if ok {
+				c.handlers = handlers
+			} else {
+				c.handlers, ok = self.ReplyHandlers["ANY"]
+			}
+		} else {
+			log.Fatalf("Unknown type ARP")
+		}
+
+		c.Start()
 	}
+}
+
+func (self *Engine) Request(addr string, handle Handle) {
+	self.RequestHandlers[addr] = append(self.RequestHandlers[addr], handle)
+	fmt.Println("Request handlers num =", len(self.RequestHandlers[addr]))
+}
+
+func (self *Engine) Reply(addr string, handle Handle) {
+	self.ReplyHandlers[addr] = append(self.ReplyHandlers[addr], handle)
 }
 
 func FindDevice() {
