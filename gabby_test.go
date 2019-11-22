@@ -10,7 +10,7 @@ func TestCreateEngine(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if e.Device != "" {
+	if e.DeviceName != "" {
 		t.Errorf("device error")
 	}
 }
