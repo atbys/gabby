@@ -67,7 +67,6 @@ func defaultLogMiddleware(c *Context) {
 }
 
 func SendThatReceivedReplyMiddleware(c *Context) {
-	c.BroadCast.Send(c.Arp)
 	c.Next()
 
 }
