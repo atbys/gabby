@@ -1,12 +1,25 @@
 package gabby
 
-import "github.com/google/gopacket/layers"
+import (
+	"github.com/atbys/bcast"
+	"github.com/google/gopacket/layers"
+)
+
+type Result struct {
+	addr string
+}
 
 type Context struct {
-	Arp      *layers.ARP
-	index    int
-	engine   *Engine
-	handlers Handlers
+	Arp            *layers.ARP
+	index          int
+	Engine         *Engine
+	handlers       Handlers
+	receiveReply   chan interface{}
+	State          int
+	goroutineNum   int
+	ReceiveWaitNum *int
+	BroadCast      *bcast.Bcast
+	Result         chan Result
 }
 
 func (self *Context) Start() {

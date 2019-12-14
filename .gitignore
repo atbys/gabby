@@ -1,4 +1,5 @@
 # setting file
 *.json
+*.tml
 
 ./playground.go

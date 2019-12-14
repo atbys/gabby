@@ -1,0 +1,14 @@
+[device]
+name = "en0"
+hwaddr = "f4:5c:89:bf:e1:09"
+
+[network]
+router_mac = "??:??:??:??:??:??"
+router_ip = "???.???.???.???"
+
+[database]
+host = "localhost"
+port = 5432
+user = "gabby"
+pass = ""
+dbname = "network_test"
