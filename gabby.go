@@ -72,6 +72,7 @@ func (self *Engine) Init() error {
 	return nil
 }
 
+//entry
 func (self *Engine) Run() {
 	packetSource := gopacket.NewPacketSource(self.phandle, self.phandle.LinkType())
 	packets := packetSource.Packets()
