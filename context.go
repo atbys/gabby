@@ -1,7 +1,6 @@
 package gabby
 
 import (
-	"github.com/atbys/bcast"
 	"github.com/google/gopacket/layers"
 )
 
@@ -18,7 +17,6 @@ type Context struct {
 	State          int
 	goroutineNum   int
 	ReceiveWaitNum *int
-	BroadCast      *bcast.Bcast
 	Result         chan Result
 }
 
