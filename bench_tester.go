@@ -57,7 +57,7 @@ func main() {
 	e.Request("ANY", func(c *gabby.Context){})
 	e.Reply("ANY", func(c *gabby.Context){})
 
-	packets := make(chan gopacket.Packet, 1024)
+	packets := make(chan gopacket.Packet, 65535)
 	go e.HandleManager(packets)
 
 	quit := make(chan os.Signal)
@@ -65,7 +65,7 @@ func main() {
 
 	for i := 1; i < 256; i++ {
 		for j:=1; j < 256; j++{
-			arp.DstProtAddress = net.IP{192, 168, byte(j), byte(i)}.To4()
+			arp.DstProtAddress = net.IP{172, 168, byte(j), byte(i)}.To4()
 			err = gopacket.SerializeLayers(buf, opts, &eth, &arp)
 			if err != nil {
 				log.Fatal(err)

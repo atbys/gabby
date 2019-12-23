@@ -97,6 +97,12 @@ func (self *Engine) HandleManager(packets chan gopacket.Packet) {
 		select {
 		case packet := <-packets:
 			// Process packet here
+			dot1qLayer := packet.Layer(layers.LayerTypeDot1Q)
+			if dot1qLayer == nil {
+				continue
+			}
+			dot1q := dot1qLayer.(*layers.Dot1Q)
+
 			arpLayer := packet.Layer(layers.LayerTypeARP)
 			if arpLayer == nil {
 				continue
@@ -119,6 +125,7 @@ func (self *Engine) HandleManager(packets chan gopacket.Packet) {
 			c := &Context{
 				Arp:    arp,
 				index:  0,
+				VlanID: dot1q.VLANIdentifier,
 				Engine: self,
 				Result: result,
 			}
@@ -151,6 +158,7 @@ func (self *Engine) HandleManager(packets chan gopacket.Packet) {
 				log.Fatal(srcIP)
 			}
 
+			c.SetAddr = srcIP
 			go c.Start()
 
 		case r := <-result:
@@ -211,6 +219,49 @@ func (self *Engine) SendRequestARPPacket(dstHWAddr net.HardwareAddr, dstIP net.I
 	return nil
 }
 
+func (self *Engine) SendRequestARPPacketWithVLAN(dstHWAddr net.HardwareAddr, dstIP net.IP, srcHWAddr net.HardwareAddr, srcIP net.IP, vlanid uint16) error {
+	eth := layers.Ethernet{
+		SrcMAC:       srcHWAddr,
+		DstMAC:       dstHWAddr,
+		EthernetType: layers.EthernetTypeDot1Q,
+	}
+
+	arp := layers.ARP{
+		AddrType:          layers.LinkTypeEthernet,
+		Protocol:          layers.EthernetTypeIPv4,
+		HwAddressSize:     6,
+		ProtAddressSize:   4,
+		Operation:         layers.ARPRequest,
+		SourceHwAddress:   []byte(srcHWAddr),
+		SourceProtAddress: []byte(srcIP),
+		DstHwAddress:      []byte(dstHWAddr),
+		DstProtAddress:    []byte(dstIP),
+	}
+
+	dot1q := layers.Dot1Q{
+		VLANIdentifier:vlanid,
+		Type:layers.EthernetTypeARP,
+	}
+
+	buf := gopacket.NewSerializeBuffer()
+
+	opts := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true,
+	}
+
+	err := gopacket.SerializeLayers(buf, opts, &eth, &dot1q, &arp)
+	if err != nil {
+		return err
+	}
+	err = self.phandle.WritePacketData(buf.Bytes())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (self *Engine) SendReplyARPPacket(dstHWAddr net.HardwareAddr, dstIP net.IP, srcHWAddr net.HardwareAddr, srcIP net.IP) error {
 	eth := layers.Ethernet{
 		SrcMAC:       srcHWAddr,
@@ -238,6 +289,51 @@ func (self *Engine) SendReplyARPPacket(dstHWAddr net.HardwareAddr, dstIP net.IP,
 	}
 
 	err := gopacket.SerializeLayers(buf, opts, &eth, &arp)
+	if err != nil {
+		return err
+	}
+	err = self.phandle.WritePacketData(buf.Bytes())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (self *Engine) SendReplyARPPacketWithVLAN(dstHWAddr net.HardwareAddr, dstIP net.IP, srcHWAddr net.HardwareAddr, srcIP net.IP, vlanid uint16) error {
+	eth := layers.Ethernet{
+		SrcMAC:       srcHWAddr,
+		DstMAC:       dstHWAddr,
+		EthernetType: layers.EthernetTypeARP,
+	}
+
+	dot1q := layers.Dot1Q{
+		Priority:       0,
+		DropEligible:   false,
+		VLANIdentifier: vlanid,
+		Type:           layers.EthernetTypeARP,
+	}
+
+	arp := layers.ARP{
+		AddrType:          layers.LinkTypeEthernet,
+		Protocol:          layers.EthernetTypeIPv4,
+		HwAddressSize:     6,
+		ProtAddressSize:   4,
+		Operation:         layers.ARPReply,
+		SourceHwAddress:   []byte(srcHWAddr),
+		SourceProtAddress: []byte(srcIP),
+		DstHwAddress:      []byte(dstHWAddr),
+		DstProtAddress:    []byte(dstIP),
+	}
+
+	buf := gopacket.NewSerializeBuffer()
+
+	opts := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true,
+	}
+
+	err := gopacket.SerializeLayers(buf, opts, &eth, &dot1q, &arp)
 	if err != nil {
 		return err
 	}

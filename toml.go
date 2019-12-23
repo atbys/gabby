@@ -9,7 +9,7 @@ import (
 type Config struct {
 	Device   DeviceConfig
 	Database Database
-	Network  NetworkConfig
+	Routers  []RouterConfig `toml:"routers"`
 }
 
 type Database struct {
@@ -25,9 +25,9 @@ type DeviceConfig struct {
 	Hwaddr string `toml:"hwaddr"`
 }
 
-type NetworkConfig struct {
+type RouterConfig struct {
 	RouterIP  string `toml:"router_ip"`
-	RouterMAC string `"toml:"router_mac`
+	RouterMAC string `toml:"router_mac"`
 }
 
 func (self *Engine) readConfig() error {

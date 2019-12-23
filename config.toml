@@ -1,10 +1,46 @@
 [device]
-name = "en0"
+name = "en5"
 hwaddr = "f4:5c:89:bf:e1:09"
 
-[network]
-router_mac = "??:??:??:??:??:??"
-router_ip = "???.???.???.???"
+[[routers]]
+router_mac = "5c-45-27-39-05-81"
+router_ip = "10.0.2.254"
+
+[[routers]]
+router_mac = "5c-45-27-39-05-81"
+router_ip = "10.0.3.254"
+
+[[routers]]
+router_mac = "5c-45-27-39-05-81"
+router_ip = "10.0.4.254"
+
+[[routers]]
+router_mac = "5c-45-27-39-05-81"
+router_ip = "10.0.5.254"
+
+[[routers]]
+router_mac = "5c-45-27-39-05-81"
+router_ip = "10.0.6.254"
+
+[[routers]]
+router_mac = "5c-45-27-39-05-81"
+router_ip = "10.0.7.254"
+
+[[routers]]
+router_mac = "5c-45-27-39-05-81"
+router_ip = "10.0.8.254"
+
+[[routers]]
+router_mac = "5c-45-27-39-05-81"
+router_ip = "10.0.9.254"
+
+[[routers]]
+router_mac = "5c-45-27-39-05-81"
+router_ip = "10.0.10.254"
+
+[[routers]]
+router_mac = "5c-45-27-39-05-81"
+router_ip = "10.0.11.254"
 
 [database]
 host = "localhost"
