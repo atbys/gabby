@@ -2,6 +2,7 @@ package gabby
 
 import (
 	"github.com/google/gopacket/layers"
+	"net"
 )
 
 type Result struct {
@@ -10,8 +11,9 @@ type Result struct {
 
 type Context struct {
 	Arp            *layers.ARP
+	FromRouter     bool
 	index          int
-	VlanID		uint16
+	VlanID         uint16
 	Engine         *Engine
 	handlers       Handlers
 	receiveReply   chan interface{}
@@ -19,7 +21,11 @@ type Context struct {
 	goroutineNum   int
 	ReceiveWaitNum *int
 	Result         chan Result
-	SetAddr	string
+	SetAddr        string
+	DstIPaddr      net.IP
+	SrcIPaddr      net.IP
+	DstMACaddr     net.HardwareAddr
+	SrcMACaddr     net.HardwareAddr
 }
 
 func (self *Context) Start() {

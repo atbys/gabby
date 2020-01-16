@@ -142,6 +142,9 @@ func (self *Engine) HandleManager(packets chan gopacket.Packet) {
 				} else {
 					c.handlers, ok = self.RequestHandlers["ANY"]
 				}
+				c.DstIPaddr = net.IP(arp.DstProtAddress)
+				c.SrcIPaddr = net.IP(arp.SourceProtAddress)
+				c.SrcMACaddr = net.HardwareAddr(arp.SourceHwAddress)
 			} else if isReply {
 				handlers, ok := self.ReplyHandlers[srcIP]
 				if ok {
@@ -163,7 +166,7 @@ func (self *Engine) HandleManager(packets chan gopacket.Packet) {
 
 		case r := <-result:
 			delete(processingHandle, r.addr)
-			fmt.Println(processingHandle)
+			//fmt.Println(processingHandle)
 		}
 	}
 }
@@ -239,8 +242,8 @@ func (self *Engine) SendRequestARPPacketWithVLAN(dstHWAddr net.HardwareAddr, dst
 	}
 
 	dot1q := layers.Dot1Q{
-		VLANIdentifier:vlanid,
-		Type:layers.EthernetTypeARP,
+		VLANIdentifier: vlanid,
+		Type:           layers.EthernetTypeARP,
 	}
 
 	buf := gopacket.NewSerializeBuffer()

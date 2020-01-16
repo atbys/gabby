@@ -2,6 +2,8 @@ package gabby
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/jinzhu/gorm"
 	_ "github.com/lib/pq"
 )
@@ -13,11 +15,11 @@ type HostHistry struct {
 }
 
 type HostCurrentState struct {
-	IpAddr string
-	MacAddr string
-	VlanID int
-	State int
-	LastTimeStamp string
+	Ipaddr  string
+	Macaddr string
+	//VlanID    int
+	State     int
+	Timestamp time.Time `gorm:"default:CURRENT_TIMESTAMP"`
 }
 
 func (self *Database) Connect() (*gorm.DB, error) {
@@ -69,7 +71,7 @@ func (self *Database) InsertHost(ip string, mac string) error {
 	var h HostHistry
 	h.IpAddr = ip
 	h.MacAddr = mac
-	h.TimeStamp = "current_now"
+	h.TimeStamp = "current_timestamp"
 
 	db.Table("hosts").Create(&h)
 
@@ -84,11 +86,12 @@ func (self *Database) InsertHostState(ip string, mac string, state int) error {
 	defer db.Close()
 
 	var hs HostCurrentState
-	hs.IpAddr = ip
-	hs.MacAddr = mac
+	hs.Ipaddr = ip
+	hs.Macaddr = mac
 	hs.State = state
+	//hs.Timestamp = "current_timestamp"
 
-	db.Table("current_map").Create(&hs)
+	db.Table("test_map").Create(&hs)
 
 	return nil
 }
@@ -106,8 +109,8 @@ func (self *Database) UpadateHostState(ip string, mac string, state int, where s
 
 	hsAfter := hsBefore
 
-	hsAfter.IpAddr = ip
-	hsAfter.MacAddr = mac
+	hsAfter.Ipaddr = ip
+	hsAfter.Macaddr = mac
 	hsAfter.State = state
 
 	db.Model(&hsBefore).Update(&hsAfter)

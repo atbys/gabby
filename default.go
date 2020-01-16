@@ -71,14 +71,14 @@ func SendThatReceivedReplyMiddleware(c *Context) {
 
 }
 
-//TODO REVIEW
 func CheckExistenceMiddleware(c *Context) {
-	fmt.Println("[DEBUG] check existence start")
+	//fmt.Println("[DEBUG] check existence start")
 	rand.Seed(time.Now().UnixNano())
 
 	c.State = CHECKING
 
-	MyMACAddr, err := net.ParseMAC("f4:5c:89:bf:e1:09")
+	//MyMACAddr, err := net.ParseMAC("f4:5c:89:bf:e1:09")
+	MyMACAddr, err := net.ParseMAC("34-76-c5-41-1e-22")
 	if err != nil {
 		log.Fatalf("parse mac: %v", err)
 	}
