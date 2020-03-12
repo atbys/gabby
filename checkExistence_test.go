@@ -52,7 +52,7 @@ func TestCheckExistence(t *testing.T) {
 	dstIP = net.ParseIP("192.168.13.1")
 	arp.DstProtAddress = []byte(dstIP)
 	c.index = 0
-	c.receiveReply = make(chan interface{})
+	c.recvReply = make(chan interface{})
 
 	wg.Add(1)
 	go func() {
@@ -61,7 +61,7 @@ func TestCheckExistence(t *testing.T) {
 	}()
 
 	time.Sleep(1 * time.Second)
-	c.receiveReply <- struct{}{}
+	c.recvReply <- struct{}{}
 
 	wg.Wait()
 	if c.State != USED {

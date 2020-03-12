@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"os"
 	"time"
 )
 
@@ -31,22 +32,15 @@ func Default() (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	e.Use(defaultInitMiddleware)
-	//e.Use(defaultLogMiddleware)
-	//e.Use(defaultDBMiddleware)
 
-	e.Request("ANY", CheckExistenceMiddleware)
-	//	e.Reply("ANY", SendThatReceivedReplyMiddleware)
+	f, _ := os.Create("log")
+	e.logger = log.New(f, "log: ", log.Lshortfile)
+	e.RegistHandle(REQUEST_FROM_ROUTER, defaultInitMiddleware)
+	e.RegistHandle(REQUEST_FROM_HOST, defaultInitMiddleware)
+
+	e.RegistHandle(REQUEST_FROM_HOST, CheckExistenceMiddleware)
+	e.RegistHandle(REQUEST_FROM_ROUTER, CheckExistenceMiddleware)
 	return e, nil
-}
-
-func defaultDBMiddleware(c *Context) {
-	//preprocess
-
-	c.Next()
-
-	//postprocess
-	c.Engine.DB.SelectAll("HostState")
 }
 
 func defaultInitMiddleware(c *Context) {
@@ -54,31 +48,34 @@ func defaultInitMiddleware(c *Context) {
 	c.Next()
 	c.goroutineNum -= 1
 	c.Result <- Result{
-		addr: net.IP(c.Arp.SourceProtAddress).String(),
+		pid:   c.pid,
+		dstIP: c.DstIPaddr.String(),
 	}
 }
 
 func defaultLogMiddleware(c *Context) {
 	//preprocess
-	fmt.Printf("\x1b[31m%s\x1b[0mARP packet get!!\n", "[+]")
+	//fmt.Printf("\x1b[31m%s\x1b[0mARP packet get!!\n", "[+]")
+
+	c.Engine.logger.Printf("[%v] %v(%v) is USED\n", time.Now(), c.SrcIPaddr, c.SrcMACaddr)
 	c.Next()
-	fmt.Printf("\x1b[31m%s\x1b[0mNext packet waiting...\n", "[+]")
+	if c.State == UNUSED {
+		c.Engine.logger.Printf("[%v] %v(%v) is UNUSED\n", time.Now(), c.DstIPaddr, c.DstMACaddr)
+	} else {
+		c.Engine.logger.Printf("[%v] %v(%v) is USED\n", time.Now(), c.DstIPaddr, c.DstMACaddr)
+	}
+	//fmt.Printf("\x1b[31m%s\x1b[0mNext packet waiting...\n", "[+]")
 	//postprocess
 }
 
-func SendThatReceivedReplyMiddleware(c *Context) {
-	c.Next()
-
-}
-
 func CheckExistenceMiddleware(c *Context) {
-	//fmt.Println("[DEBUG] check existence start")
+	fmt.Println("[DEBUG] check existence start")
 	rand.Seed(time.Now().UnixNano())
 
 	c.State = CHECKING
 
 	//MyMACAddr, err := net.ParseMAC("f4:5c:89:bf:e1:09")
-	MyMACAddr, err := net.ParseMAC("34-76-c5-41-1e-22")
+	MyMACAddr, err := net.ParseMAC(c.Engine.Config.Device.Hwaddr)
 	if err != nil {
 		log.Fatalf("parse mac: %v", err)
 	}
@@ -90,7 +87,13 @@ SENDLOOP:
 		} else {
 			randFloat = PROVE_MIN + rand.Float32()*(PROVE_MAX-PROVE_MIN)
 		}
-		err := c.Engine.SendRequestARPPacket(BroadcastMAC, net.IP(c.Arp.DstProtAddress).To4(), MyMACAddr, ZeroIP)
+		var err error
+		if c.Engine.IsVLAN {
+			err = c.Engine.SendRequestARPPacketWithVLAN(BroadcastMAC, net.IP(c.Arp.DstProtAddress).To4(), MyMACAddr, ZeroIP, c.VlanID)
+		} else {
+			err = c.Engine.SendRequestARPPacket(BroadcastMAC, net.IP(c.Arp.DstProtAddress).To4(), MyMACAddr, ZeroIP)
+		}
+
 		if err != nil {
 			log.Fatalf("send arp: %v", err)
 		}
@@ -99,7 +102,7 @@ SENDLOOP:
 		select {
 		case <-t.C:
 			continue
-		case <-c.receiveReply:
+		case <-c.recvReply:
 			c.State = USED
 			break SENDLOOP
 		}

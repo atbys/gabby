@@ -15,6 +15,12 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
+const (
+	REQUEST_FROM_ROUTER = iota
+	REQUEST_FROM_HOST
+	USED_PACKET
+)
+
 type Handle func(*Context)
 
 type Handlers []Handle
@@ -28,17 +34,24 @@ type Engine struct {
 	phandle         *pcap.Handle
 	RequestHandlers map[string]Handlers
 	ReplyHandlers   map[string]Handlers
-	DB              Database
-	Config          Config
+	// RequestFromRouterHandlers Handlers
+	// RequestFromHostHandlers Handlers
+	// UsedHandles		Handlers
+	registedHandlers map[int]Handlers
+	DB               Database
+	Config           Config
+	IsVLAN           bool
+	logger           *log.Logger
 }
 
 func New() (*Engine, error) {
 	e := &Engine{
-		snapshotLen:     1024,
-		promiscuous:     true,
-		timeout:         30 * time.Second,
-		RequestHandlers: make(map[string]Handlers),
-		ReplyHandlers:   make(map[string]Handlers),
+		snapshotLen:      1024,
+		promiscuous:      true,
+		timeout:          30 * time.Second,
+		RequestHandlers:  make(map[string]Handlers),
+		ReplyHandlers:    make(map[string]Handlers),
+		registedHandlers: make(map[int]Handlers),
 	}
 
 	err := e.Init()
@@ -89,99 +102,132 @@ func (self *Engine) Run() {
 	fmt.Println("[Interrupt] Exit")
 }
 
-func (self *Engine) HandleManager(packets chan gopacket.Packet) {
-	processingHandle := make(map[string]*Context)
+func (self *Engine) analizePacket(packet gopacket.Packet) (*Context, int) {
 	myHWaddr, _ := net.ParseMAC(self.Config.Device.Hwaddr)
-	result := make(chan Result)
+
+	ethLayer := packet.Layer(layers.LayerTypeEthernet)
+	if ethLayer == nil {
+		return nil, 0
+	}
+	eth := ethLayer.(*layers.Ethernet)
+
+	arpLayer := packet.Layer(layers.LayerTypeARP)
+	if arpLayer == nil {
+		return nil, 0
+	}
+	arp := arpLayer.(*layers.ARP)
+	if bytes.Equal([]byte(myHWaddr), []byte(eth.SrcMAC)) {
+		// This is a packet I sent.
+		return nil, 0
+	}
+
+	srcIP := net.IP(arp.SourceProtAddress).String()
+	//dstIP := net.IP(arp.DstProtAddress).String()
+
+	c := &Context{
+		Arp:        arp,
+		index:      0,
+		Engine:     self,
+		DstIPaddr:  net.IP(arp.DstProtAddress),
+		SrcIPaddr:  net.IP(arp.SourceProtAddress),
+		DstMACaddr: eth.DstMAC,
+		SrcMACaddr: eth.SrcMAC,
+		pid:        net.IP(arp.SourceProtAddress).String() + net.IP(arp.DstProtAddress).String(),
+		recvReply:  make(chan interface{}),
+	}
+
+	if self.IsVLAN {
+		dot1qLayer := packet.Layer(layers.LayerTypeDot1Q)
+		if dot1qLayer == nil {
+			return nil, 0
+		}
+		dot1q := dot1qLayer.(*layers.Dot1Q)
+		c.VlanID = dot1q.VLANIdentifier
+	}
+
+	//var isRequest = arp.Operation == layers.ARPRequest
+	var isReply = arp.Operation == layers.ARPReply
+
+	isFromRouter := isFromRouter(self.Config.Routers, srcIP)
+
+	if isReply {
+		return c, USED_PACKET
+	} else {
+		if isFromRouter {
+			return c, REQUEST_FROM_ROUTER
+		} else if bytes.Equal(arp.SourceProtAddress, arp.DstProtAddress) {
+			return c, USED_PACKET
+		} else {
+			return c, REQUEST_FROM_HOST
+		}
+	}
+}
+
+func isFromRouter(routers []RouterConfig, srcIP string) bool {
+	for _, router := range routers {
+		if router.RouterIP == srcIP {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (self *Engine) HandleManager(packets chan gopacket.Packet) {
+	blockDupList := make(map[string]*Context)
+	waitRecvList := make(map[string]*Context)
+	result := make(chan Result, 1024)
+
 	for {
 		select {
 		case packet := <-packets:
 			// Process packet here
-			dot1qLayer := packet.Layer(layers.LayerTypeDot1Q)
-			if dot1qLayer == nil {
-				continue
-			}
-			dot1q := dot1qLayer.(*layers.Dot1Q)
-
-			arpLayer := packet.Layer(layers.LayerTypeARP)
-			if arpLayer == nil {
-				continue
-			}
-			arp := arpLayer.(*layers.ARP)
-			if bytes.Equal([]byte(myHWaddr), arp.SourceHwAddress) {
-				// This is a packet I sent.
-				continue
-			}
 			// log.Printf("IP %v is at %v", net.IP(arp.SourceProtAddress), net.HardwareAddr(arp.SourceHwAddress))
-
-			srcIP := net.IP(arp.SourceProtAddress).String()
-			dstIP := net.IP(arp.DstProtAddress).String()
-
-			_, ok := processingHandle[dstIP]
-			if ok {
-				continue
+			c, packetClass := self.analizePacket(packet)
+			if c == nil {
+				break
 			}
 
-			c := &Context{
-				Arp:    arp,
-				index:  0,
-				VlanID: dot1q.VLANIdentifier,
-				Engine: self,
-				Result: result,
-			}
-
-			processingHandle[srcIP] = c
-
-			var isRequest = arp.Operation == layers.ARPRequest
-			var isReply = arp.Operation == layers.ARPReply
-
-			if isRequest {
-				handlers, ok := self.RequestHandlers[srcIP]
+			if packetClass == USED_PACKET {
+				waitC, ok := waitRecvList[c.SrcIPaddr.String()]
+				fmt.Println("hey")
+				fmt.Println(waitRecvList)
 				if ok {
-					c.handlers = handlers
-				} else {
-					c.handlers, ok = self.RequestHandlers["ANY"]
+					waitC.recvReply <- struct{}{}
 				}
-				c.DstIPaddr = net.IP(arp.DstProtAddress)
-				c.SrcIPaddr = net.IP(arp.SourceProtAddress)
-				c.SrcMACaddr = net.HardwareAddr(arp.SourceHwAddress)
-			} else if isReply {
-				handlers, ok := self.ReplyHandlers[srcIP]
-				if ok {
-					c.handlers = handlers
-				} else {
-					c.handlers, ok = self.ReplyHandlers["ANY"]
-				}
-
-				c, ok := processingHandle[dstIP]
-				if ok {
-					c.receiveReply <- struct{}{}
-				}
+				fmt.Println("yo")
+				delete(waitRecvList, c.SrcIPaddr.String())
 			} else {
-				log.Fatal(srcIP)
+				if _, ok := blockDupList[c.pid]; ok {
+					break
+				}
+				log.Println("add")
+				c.Result = result
+				waitRecvList[c.DstIPaddr.String()] = c
+				blockDupList[c.pid] = c
 			}
 
-			c.SetAddr = srcIP
+			h, ok := self.registedHandlers[packetClass]
+			if ok {
+				c.handlers = h
+			} else {
+				break
+			}
+
 			go c.Start()
 
 		case r := <-result:
-			delete(processingHandle, r.addr)
+			log.Println("delete")
+			delete(blockDupList, r.pid)
+			delete(waitRecvList, r.dstIP)
 			//fmt.Println(processingHandle)
 		}
 	}
 }
 
-func (self *Engine) Request(addr string, handle Handle) {
-	self.RequestHandlers[addr] = append(self.RequestHandlers[addr], handle)
-}
+func (self *Engine) RegistHandle(packetClass int, handle Handle) {
 
-func (self *Engine) Reply(addr string, handle Handle) {
-	self.ReplyHandlers[addr] = append(self.ReplyHandlers[addr], handle)
-}
-
-func (self *Engine) Use(middleware Handle) {
-	self.RequestHandlers["ANY"] = append(self.RequestHandlers["ANY"], middleware)
-	self.ReplyHandlers["ANY"] = append(self.ReplyHandlers["ANY"], middleware)
+	self.registedHandlers[packetClass] = append(self.registedHandlers[packetClass], handle)
 }
 
 func (self *Engine) SendRequestARPPacket(dstHWAddr net.HardwareAddr, dstIP net.IP, srcHWAddr net.HardwareAddr, srcIP net.IP) error {

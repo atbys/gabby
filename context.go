@@ -1,12 +1,14 @@
 package gabby
 
 import (
-	"github.com/google/gopacket/layers"
 	"net"
+
+	"github.com/google/gopacket/layers"
 )
 
 type Result struct {
-	addr string
+	pid   string
+	dstIP string
 }
 
 type Context struct {
@@ -16,12 +18,12 @@ type Context struct {
 	VlanID         uint16
 	Engine         *Engine
 	handlers       Handlers
-	receiveReply   chan interface{}
+	recvReply      chan interface{}
 	State          int
 	goroutineNum   int
 	ReceiveWaitNum *int
 	Result         chan Result
-	SetAddr        string
+	pid            string
 	DstIPaddr      net.IP
 	SrcIPaddr      net.IP
 	DstMACaddr     net.HardwareAddr

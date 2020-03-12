@@ -3,18 +3,13 @@
 package main
 
 import (
-	"fmt"
-	"time"
+	"log"
+	"os"
 )
 
 func main() {
-	Done := make(chan interface{})
+	f, _ := os.Create("Hello.txt")
+	logger := log.New(f, "Logger: ", log.Lshortfile)
 
-	go func(){
-		time.Sleep(1 * time.Second)
-		Done <- struct{}{}
-	}()
-
-	<-Done
-	fmt.Println("Done")
+	logger.Println("Hello")
 }
